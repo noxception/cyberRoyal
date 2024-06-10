@@ -26,6 +26,7 @@ $settings = @"
     "psmRdpAddress": "YOUR-PSM-RDP",
     "psmSshAddress": "YOUR-PSM-SSH",
     "allAccountsMode": 0,
+    "PSConstrainedMode": 1,
     "safeFilter": 0,
     "safeFilterRegex": ".*_OnylThisSafes.*",
     "groupBasedMode": 0,
@@ -93,12 +94,15 @@ $settings = @"
 #########################################
 #           Powershell Settings         #
 #########################################
-[System.Net.WebRequest]::DefaultWebProxy.Credentials = [System.Net.CredentialCache]::DefaultCredentials
-[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 -bor [System.Net.SecurityProtocolType]::Tls11
-if ($psCertValidation) { [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true } } else { [System.Net.ServicePointManager]::ServerCertificateValidationCallback = $null }
+if (!$settings.PSConstrainedMode) {
+	[System.Net.WebRequest]::DefaultWebProxy.Credentials = [System.Net.CredentialCache]::DefaultCredentials
+	[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 -bor [System.Net.SecurityProtocolType]::Tls11
+	if ($psCertValidation) { [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true } } else { [System.Net.ServicePointManager]::ServerCertificateValidationCallback = $null }
+}
 
 if ($debugOn) { 
-    $stopWatch = [system.diagnostics.stopwatch]::StartNew() 
+    if ($settings.PSConstrainedMode) { $stopWatch = @{Elapsed = 0} } 
+    else { $stopWatch = [system.diagnostics.stopwatch]::StartNew() }  
     $debugNrAccounts = 0
     $debugNrServerConnections = 0
 }
@@ -150,7 +154,7 @@ $response.Objects = @()
 #              Functions                #
 #########################################
 function Invoke-Logon() {
-    $global:header = @{ }
+	$global:header = @{ }
     $header.Add('Content-type', 'application/json') 
     $logonURL = $baseURL + '/api/auth/' + $authMethod + '/Logon'
     if ($authPrompt) { $logonData = @{ username = $caCredentials.GetNetworkCredential().UserName; password = $caCredentials.GetNetworkCredential().Password; concurrentSession = $true; } | ConvertTo-Json }
@@ -381,12 +385,41 @@ else {
     $safes = Get-Safes 
     if ($debugOn) { Write-Host $stopWatch.Elapsed + " fetched safes: $( $safes.Count )" }
 }
+# get accounts from safe list or from cached data file on server
+if (!$dataUrl){
+    # no url set for the json cache, get accounts from safe list
+    $safesAndAccounts = @()
+    $accountEntriesCount = 0
 
-# get the prepared data file and remove BOM (thanks to .NET, IIS) if necessary
-$jsonFileData = Invoke-WebRequest -Uri $dataUrl -Method GET -UseBasicParsing -ContentType 'application/json; charset=utf-8'
-if ($debugOn) { Write-Host $stopWatch.Elapsed + " fetched json file length: $( $jsonFileData.RawContentLength)" }
+    #$safes.Keys | foreach-Object
+    foreach($safeName in $safes.Keys)
+        {
+        $safe = $safes[$safeName]
+        $accountURL = $baseURL + '/api/Accounts?limit=1000&filter=safeName eq ' + $safeName
+        if ($debugOn) {Write-Host $stopWatch.Elapsed + "accounturl  $accountURL from $safeName"}
+        $accountsResult = $(Invoke-WebRequest -Uri $accountURL -Headers $header -Method Get).content | ConvertFrom-Json
+        if ($null -ne $accountsResult.value -and $accountsResult.value.Length -gt 0)
+            {
+            $safeEntry = @{ "SafeName" = $safe.SafeName; "Description" = $safe.Description; "Accounts" = @() 
+            }
+            foreach ($account in $accountsResult.value) 
+                {
+                $accountEntry = @{ "userName" = $account.userName; "address" = $account.address ; "platformId" = $account.platformId; "remoteMachines" = $account.remoteMachinesAccess.remoteMachines }
+                $safeEntry.Accounts += $accountEntry
+                $accountEntriesCount++
+            	}
+            $safesAndAccounts += $safeEntry
+        }
+    }
+    if ($debugOn) { Write-Host $stopWatch.Elapsed + " catched safes accounts: $accountEntriesCount" }
+}
+else {
+    # get the prepared data file and remove BOM (thanks to .NET, IIS) if necessary
+    $jsonFileData = Invoke-WebRequest -Uri $dataUrl -Method GET -UseBasicParsing -ContentType 'application/json; charset=utf-8'
+    if ($debugOn) { Write-Host $stopWatch.Elapsed + " fetched json file length: $( $jsonFileData.RawContentLength)" }
 
-$safesAndAccounts = $jsonFileData.Content | Foreach-Object { $_ -replace "\xEF\xBB\xBF", "" } | ConvertFrom-Json
+    $safesAndAccounts = $jsonFileData.Content | Foreach-Object { $_ -replace "\xEF\xBB\xBF", "" } | ConvertFrom-Json
+}
 
 foreach ($safeAccount in $safesAndAccounts) {
    
