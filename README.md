@@ -34,7 +34,7 @@ The client side provides a powershell script for a "Dynamic Folder" in RoyalTS w
 - PowerShell v3 or greater
 - RoyalTS v5.0 or greater (v5.1+ with Web AutoForm Login entries)
 - CyberArk PSM for RDP which allow to connect RDP directly (with or without NLA) - see [CyberArk PSM documentation](https://docs.cyberark.com/Product-Doc/OnlineHelp/PAS/Latest/en/Content/PASIMP/PSSO-ConnectingDirectly.htm)
-- A Webserver that can provide the server side prefetched list (e.g. use an IIS from a PVWA component server)
+- Optionnaly, a Webserver that can provide the server side prefetched list (e.g. use an IIS from a PVWA component server)
 - Domain Accounts in CyberArk must provide their Targets in the "RemoteMachineAddress" attribute
 
 ## Setup ServerSide
@@ -42,6 +42,7 @@ The client side provides a powershell script for a "Dynamic Folder" in RoyalTS w
 The Server Side part generates a list of safes and accounts.
 Because the WebAPI call to list all accounts in all your accessable safes can take its time, it will be much faster to use a pre-fetched list.
 This gives an overall better user experience.
+If you don't want to publish the list of safes and account on a server, skip all server side prerequisites and simply leave the dataUrl setting empty on the client side script.
 
 ### Place ServerSide script and define data folder
 
