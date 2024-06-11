@@ -26,7 +26,7 @@ $settings = @"
     "psmRdpAddress": "YOUR-PSM-RDP",
     "psmSshAddress": "YOUR-PSM-SSH",
     "allAccountsMode": 0,
-    "PSConstrainedMode": 1,
+    "psConstrainedMode": 0,
     "safeFilter": 0,
     "safeFilterRegex": ".*_OnylThisSafes.*",
     "groupBasedMode": 0,
